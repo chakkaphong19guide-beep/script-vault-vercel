@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Script Vault</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-slate-900 text-white min-h-screen">
+    <nav class="bg-slate-800 border-b border-slate-700 p-4">
+        <div class="max-w-4xl mx-auto flex justify-between items-center">
+            <h1 class="text-xl font-bold flex items-center gap-2">
+                <i class="fa-solid fa-scroll text-amber-500"></i> Script Vault
+            </h1>
+            <button id="authBtn" onclick="toggleAuth()" class="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg font-medium text-sm transition">
+                <i class="fa-solid fa-key mr-1"></i> เข้าสู่ระบบแอดมิน
+            </button>
+        </div>
+    </nav>
+
+    <main class="max-w-4xl mx-auto p-4 space-y-6">
+        <!-- Admin Panel -->
+        <div id="adminPanel" class="hidden bg-slate-800 border border-indigo-500/30 rounded-xl p-5 space-y-4 shadow-lg">
+            <h2 class="text-lg font-semibold text-indigo-400 flex items-center gap-2">
+                <i class="fa-solid fa-plus-circle"></i> เพิ่มสคริปต์ใหม่
+            </h2>
+            <input type="text" id="title" placeholder="ชื่อสคริปต์ / เกม" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sm focus:outline-none focus:border-indigo-500">
+            <textarea id="code" rows="4" placeholder="วางโค้ดสคริปต์ที่นี่..." class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sm font-mono focus:outline-none focus:border-indigo-500"></textarea>
+            <button onclick="addScript()" class="w-full bg-emerald-600 hover:bg-emerald-700 font-medium py-2.5 rounded-lg text-sm transition">
+                บันทึกสคริปต์
+            </button>
+        </div>
+
+        <!-- Script List -->
+        <div id="scriptList" class="space-y-4">
+            <div class="text-center text-slate-500 py-10">กำลังโหลดสคริปต์...</div>
+        </div>
+    </main>
+
+    <!-- Modal ล็อกอิน -->
+    <div id="loginModal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div class="bg-slate-800 border border-slate-700 rounded-xl p-6 w-full max-w-md space-y-4 shadow-2xl">
+            <h3 class="text-lg font-semibold">เข้าสู่ระบบแอดมิน</h3>
+            <input type="password" id="adminPassword" placeholder="ใส่รหัสผ่านแอดมิน" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 focus:outline-none focus:border-indigo-500">
+            <div class="flex justify-end gap-2">
+                <button onclick="closeModal()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">ยกเลิก</button>
+                <button onclick="login()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-sm font-medium">ยืนยัน</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let isAdmin = false;
+        let token = '';
+
+        async function loadScripts() {
+            try {
+                const res = await fetch('/api/scripts');
+                const data = await res.json();
+                const list = document.getElementById('scriptList');
+                if (!data || data.length === 0) {
+                    list.innerHTML = `<div class="text-center text-slate-500 py-10">ยังไม่มีสคริปต์ในระบบ</div>`;
+                    return;
+                }
+                list.innerHTML = data.map((item) => `
+                    <div class="bg-slate-800 border border-slate-700 rounded-xl p-5 space-y-3">
+                        <div class="flex justify-between items-center">
+                            <h3 class="font-semibold text-lg text-amber-400">${item.title}</h3>
+                            ${isAdmin ? `<button onclick="deleteScript('${item.id}')" class="text-rose-400 hover:text-rose-300 text-sm"><i class="fa-solid fa-trash"></i> ลบ</button>` : ''}
+                        </div>
+                        <pre class="bg-slate-900 p-3 rounded-lg text-xs font-mono overflow-x-auto text-slate-300 border border-slate-800">${item.code}</pre>
+                        <button onclick="navigator.clipboard.writeText(\`${item.code.replace(/`/g, '\\`')}\`); alert('คัดลอกโค้ดเรียบร้อย!')" class="w-full bg-slate-700 hover:bg-slate-600 text-xs py-2 rounded-lg font-medium transition">
+                            <i class="fa-solid fa-copy mr-1"></i> คัดลอกสคริปต์
+                        </button>
+                    </div>
+                `).join('');
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        function toggleAuth() {
+            if (isAdmin) {
+                isAdmin = false;
+                token = '';
+                document.getElementById('adminPanel').classList.add('hidden');
+                document.getElementById('authBtn').innerHTML = `<i class="fa-solid fa-key mr-1"></i> เข้าสู่ระบบแอดมิน`;
+                loadScripts();
+            } else {
+                document.getElementById('loginModal').classList.remove('hidden');
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('loginModal').classList.add('hidden');
+        }
+
+        async function login() {
+            const pwd = document.getElementById('adminPassword').value;
+            const res = await fetch('/api/auth', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password: pwd })
+            });
+            const data = await res.json();
+            if (data.success) {
+                isAdmin = true;
+                token = data.token;
+                closeModal();
+                document.getElementById('adminPanel').classList.remove('hidden');
+                document.getElementById('authBtn').innerHTML = `<i class="fa-solid fa-right-from-bracket mr-1"></i> ออกจากระบบ`;
+                document.getElementById('adminPassword').value = '';
+                loadScripts();
+            } else {
+                alert('รหัสผ่านไม่ถูกต้อง!');
+            }
+        }
+
+        async function addScript() {
+            const title = document.getElementById('title').value;
+            const code = document.getElementById('code').value;
+            if (!title || !code) return alert('กรอกข้อมูลให้ครบ!');
+
+            const res = await fetch('/api/scripts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': token },
+                body: JSON.stringify({ title, code })
+            });
+            if (res.ok) {
+                document.getElementById('title').value = '';
+                document.getElementById('code').value = '';
+                loadScripts();
+            }
+        }
+
+        async function deleteScript(id) {
+            if (!confirm('ยืนยันการลบ?')) return;
+            await fetch('/api/scripts', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json', 'Authorization': token },
+                body: JSON.stringify({ id })
+            });
+            loadScripts();
+        }
+
+        loadScripts();
+    </script>
+</body>
+</html>
